@@ -4,15 +4,11 @@ set -e
 # Start Xvfb in the background
 Xvfb :0 -screen 0 1024x768x16 &
 XVFB_PID=$!
-sleep 2
+sleep 3
 
-# Navigate to where MT5 might install or custom path if user mounted it?
-# MT5 library handles download/install of terminal automatically if not present in custom path.
-# However, inside Wine, it usually installs to AppData.
+# Trap to cleanup Xvfb on exit
+trap "kill $XVFB_PID 2>/dev/null" EXIT
 
 # Run the Telegram Listener using Wine's Python
 echo "Starting Telegram Signal Server..."
-wine python src/telegram_listener.py
-
-# Cleanup Xvfb on exit
-kill $XVFB_PID
+wine C:\\Python310\\python.exe src/telegram_listener.py
