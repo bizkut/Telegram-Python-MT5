@@ -1,68 +1,60 @@
 # MT5 Signal Server with Telegram & OpenAI
 
-This server listens to Forex signals from Telegram, extracts structured data (using GPT-4o-mini), and executes trades on MetaTrader 5 via a Dockerized Wine environment.
+Listens to Forex signals from Telegram, interprets them with GPT-4o-mini, and executes trades on MetaTrader 5.
 
-## Logic Overview
+**Windows only** - MetaTrader5 Python library requires Windows.
 
-1.  **Telegram Listener (`src/telegram_listener.py`)**: Uses Telethon to spy on messages from configured channels.
-2.  **Signal Interpreter (`src/signal_interpreter.py`)**: Sends message text to OpenAI. It extracts Entry, SL, TP, and Actions (Open, Close, Set BE).
-    *   *Logic*: "Close profit now" messages try to close deals for that symbol (or all if unspecified) *only if they are in profit*.
-3.  **MT5 Executor (`src/mt5_executor.py`)**:
-    *   Runs inside a Linux Docker container using **Wine** to simulate Windows.
-    *   Uses the official `MetaTrader5` Python library (which requires Windows DLLs).
-    *   Automatically handles Order Open, Partial Close (if specified), and Move SL to Breakeven.
+## Quick Start
 
-## Setup Instructions
+### Option 1: Run from Source
+```bash
+pip install -r requirements.txt
+copy .env.example .env
+# Edit .env with your credentials
+python main.py
+```
 
-### 1. Prerequisites
-*   Docker & Docker Compose
-*   Telegram API Credentials (from https://my.telegram.org)
-*   OpenAI API Key
-*   MetaTrader 5 Account Details
+### Option 2: Build Executable
+```bash
+build.bat
+# Copy .env and anon.session to dist/ folder
+dist\MT5SignalServer.exe
+```
 
-### 2. Configuration
-Edit `.env`:
+## Configuration
+
+Copy `.env.example` to `.env`:
 ```ini
 TELEGRAM_API_ID=12345
 TELEGRAM_API_HASH=abcdef...
-TELEGRAM_CHANNEL_IDS=-10012345678, -10098765432 # Comma separated
+TELEGRAM_CHANNEL_IDS=-10012345678,-10098765432
 OPENAI_API_KEY=sk-proj-...
 MT5_LOGIN=123456
 MT5_PASSWORD=secret
 MT5_SERVER=MetaQuotes-Demo
+LOT_SIZE=0.01
 ```
 
-### 3. Telegram Authentication (Critical)
-Telethon requires an interactive login to generate a session file (`anon.session`). You must do this **before** building the container.
+## First Run - Telegram Auth
 
-Run locally:
-```bash
-# Install dependencies temporarily
-pip install telethon python-dotenv
+On first run, you'll be prompted to authenticate with Telegram (phone + code). This creates `anon.session` - keep this file alongside the executable.
 
-# Run auth script
-python src/auth_telegram.py
-```
-Follow the prompts (phone number, code). This will generate `anon.session`.
+## Requirements
 
-### 4. Build and Run
-```bash
-docker-compose up --build
-```
-This will:
-1.  Download a Wine-based specific image.
-2.  Install Windows Python 3.10 and MT5 dependencies.
-3.  Start Xvfb (Virtual Display).
-4.  Launch the listener.
+- Windows OS
+- Python 3.10+ (for building)
+- MetaTrader 5 terminal running
+- Telegram API credentials (https://my.telegram.org)
+- OpenAI API key
 
-### 5. Testing
-A test script is included to verify OpenAI extraction logic without trading.
-```bash
-# (Locally)
-python src/test_interpreter.py
-```
+## How It Works
+
+1. Monitors configured Telegram channels
+2. Sends messages to GPT-4o-mini for signal extraction
+3. Executes trades: OPEN (BUY/SELL), CLOSE, MODIFY (SL/BE)
+4. Only closes positions that are in profit
 
 ## Troubleshooting
-*   **"MetaTrader5 package not found"**: Ensure you are running inside the Docker container (which uses Wine). The package does NOT work on native Linux/Mac.
-*   **Authorization Errors**: Re-run `src/auth_telegram.py` to refresh `anon.session`.
-*   **Architecture**: If on Apple Silicon (M1/M2), you might need `platform: linux/amd64` in docker-compose, and emulation will be slow. The `tobix/wine` image is x86_64.
+
+- **MT5 not connecting**: Ensure MT5 terminal is running and logged in
+- **Telegram auth issues**: Delete `anon.session` and re-authenticate
