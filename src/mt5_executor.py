@@ -7,9 +7,7 @@ load_dotenv()
 LOGIN = int(os.getenv("MT5_LOGIN", 0))
 PASSWORD = os.getenv("MT5_PASSWORD")
 SERVER = os.getenv("MT5_SERVER")
-
-# Use a default lot size or calculate dynamically later
-LOT_SIZE = 0.01  
+LOT_SIZE = float(os.getenv("LOT_SIZE", 0.01))  
 DEVIATION = 20
 
 def initialize_mt5():
