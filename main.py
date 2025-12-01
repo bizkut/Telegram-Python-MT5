@@ -116,17 +116,38 @@ def execute_trade(signal: dict):
         _modify_position(signal)
 
 
+def _get_filling_mode(symbol: str):
+    """Get the appropriate filling mode for a symbol."""
+    info = mt5.symbol_info(symbol)
+    if info is None:
+        return mt5.ORDER_FILLING_RETURN
+    
+    filling_mode = info.filling_mode
+    if filling_mode & mt5.SYMBOL_FILLING_FOK:
+        return mt5.ORDER_FILLING_FOK
+    elif filling_mode & mt5.SYMBOL_FILLING_IOC:
+        return mt5.ORDER_FILLING_IOC
+    else:
+        return mt5.ORDER_FILLING_RETURN
+
+
 def _open_position(signal: dict):
     symbol = signal['symbol']
     sub_action = signal.get('sub_action')
     
     order_type = mt5.ORDER_TYPE_BUY if sub_action == "BUY" else mt5.ORDER_TYPE_SELL
     tick = mt5.symbol_info_tick(symbol)
+    if tick is None:
+        print(f"[ERROR] Failed to get tick data for {symbol}")
+        return
+    
     price = tick.ask if sub_action == "BUY" else tick.bid
     
     sl = float(signal.get('sl') or 0)
     tp_list = signal.get('tp') or []
     tp = float(tp_list[0]) if tp_list else 0
+    
+    filling_mode = _get_filling_mode(symbol)
     
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -140,16 +161,27 @@ def _open_position(signal: dict):
         "magic": 234000,
         "comment": "TG Signal",
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
+        "type_filling": filling_mode,
     }
     
     result = mt5.order_send(request)
-    print(f"[TRADE] Open {sub_action} {symbol}: {result}")
+    if result is None:
+        print(f"[ERROR] order_send failed, error: {mt5.last_error()}")
+        return
+    
+    if result.retcode != mt5.TRADE_RETCODE_DONE:
+        print(f"[ERROR] Open {sub_action} {symbol} failed, retcode={result.retcode}, comment={result.comment}")
+        result_dict = result._asdict()
+        for field in result_dict.keys():
+            print(f"   {field}={result_dict[field]}")
+    else:
+        print(f"[OK] Opened {sub_action} {symbol}: ticket={result.order}, price={result.price}, volume={result.volume}")
 
 
 def _close_position(signal: dict):
     positions = mt5.positions_get()
     if not positions:
+        print("[INFO] No open positions to close")
         return
 
     sub_action = signal.get('sub_action')
@@ -164,12 +196,18 @@ def _close_position(signal: dict):
 
         close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
         tick = mt5.symbol_info_tick(pos.symbol)
+        if tick is None:
+            print(f"[ERROR] Failed to get tick data for {pos.symbol}")
+            continue
+            
         price = tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask
         
         volume = pos.volume
         if sub_action == "CLOSE_HALF":
             volume = max(round(pos.volume / 2, 2), 0.01)
 
+        filling_mode = _get_filling_mode(pos.symbol)
+        
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": pos.symbol,
@@ -181,11 +219,18 @@ def _close_position(signal: dict):
             "magic": 234000,
             "comment": "TG Close",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": filling_mode,
         }
         
         result = mt5.order_send(request)
-        print(f"[TRADE] Close {pos.symbol}: {result}")
+        if result is None:
+            print(f"[ERROR] Close order_send failed, error: {mt5.last_error()}")
+            continue
+            
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print(f"[ERROR] Close {pos.symbol} failed, retcode={result.retcode}, comment={result.comment}")
+        else:
+            print(f"[OK] Closed {pos.symbol}: ticket={pos.ticket}, volume={volume}")
 
 
 def _modify_position(signal: dict):
@@ -195,6 +240,7 @@ def _modify_position(signal: dict):
 
     positions = mt5.positions_get()
     if not positions:
+        print("[INFO] No open positions to modify")
         return
 
     target_symbol = signal.get('symbol')
@@ -230,7 +276,14 @@ def _modify_position(signal: dict):
         }
         
         result = mt5.order_send(request)
-        print(f"[TRADE] Modify SL {pos.symbol}: {result}")
+        if result is None:
+            print(f"[ERROR] Modify order_send failed, error: {mt5.last_error()}")
+            continue
+            
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            print(f"[ERROR] Modify SL {pos.symbol} failed, retcode={result.retcode}, comment={result.comment}")
+        else:
+            print(f"[OK] Modified SL {pos.symbol}: ticket={pos.ticket}, new_sl={new_sl}")
 
 
 # Telegram client
