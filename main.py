@@ -123,9 +123,9 @@ def _get_filling_mode(symbol: str):
         return mt5.ORDER_FILLING_RETURN
     
     filling_mode = info.filling_mode
-    if filling_mode & mt5.SYMBOL_FILLING_FOK:
+    if filling_mode & 1:  # SYMBOL_FILLING_FOK
         return mt5.ORDER_FILLING_FOK
-    elif filling_mode & mt5.SYMBOL_FILLING_IOC:
+    elif filling_mode & 2:  # SYMBOL_FILLING_IOC
         return mt5.ORDER_FILLING_IOC
     else:
         return mt5.ORDER_FILLING_RETURN
